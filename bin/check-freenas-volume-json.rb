@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 #
-#   check-http-json
+#   check-freenas-volume-json
 #
 # DESCRIPTION:
 #   Takes either a URL or a combination of host/path/query/port/ssl, and checks
@@ -37,17 +37,34 @@ require 'net/https'
 #
 # Check JSON
 #
-class CheckJson < Sensu::Plugin::Check::CLI
-  option :url, short: '-u URL'
-  option :host, short: '-h HOST'
-  option :path, short: '-p PATH'
-  option :query, short: '-q QUERY'
-  option :port, short: '-P PORT', proc: proc(&:to_i)
-  option :method, short: '-m GET|POST'
-  option :postbody, short: '-b /file/with/post/body'
-  option :header, short: '-H HEADER', long: '--header HEADER'
-  option :timeout, short: '-t SECS', proc: proc(&:to_i), default: 15
-  option :whole_response, short: '-w', long: '--whole-response', boolean: true, default: false
+class CheckFreenasVolume < Sensu::Plugin::Check::CLI
+  option :url,
+    short: '-u URL'
+  option :host,
+    short: '-h HOST'
+  option :path,
+    short: '-p PATH'
+  option :query,
+    short: '-q QUERY'
+  option :port,
+    short: '-P PORT',
+    proc: proc(&:to_i)
+  option :method,
+    short: '-m GET|POST'
+  option :postbody,
+    short: '-b /file/with/post/body'
+  option :header,
+    short: '-H HEADER',
+    long: '--header HEADER'
+  option :timeout,
+    short: '-t SECS',
+    proc: proc(&:to_i),
+    default: 15
+  option :whole_response,
+    short: '-W',
+    long: '--whole-response',
+    boolean: true,
+    default: false
   option :vol_name,
     short: '-v VOLUME',
     long: '--volume-name VOLUME'
@@ -55,13 +72,19 @@ class CheckJson < Sensu::Plugin::Check::CLI
     short: '-w PERCENT',
     description: 'Warn if PERCENT or more of disk full',
     proc: proc(&:to_f),
-    default: 85
+    default: 85.0
   option :bcrit,
      short: '-c PERCENT',
      description: 'Critical if PERCENT or more of disk full',
      proc: proc(&:to_f),
-     default: 95
-     
+     default: 95.0
+  option :user,
+    short: '-U',
+    long: '--username USER'
+  option :password,
+    short: '-a',
+    long: '--password PASS'
+
   def initialize
     super
     @crit_fs = []
@@ -107,15 +130,18 @@ class CheckJson < Sensu::Plugin::Check::CLI
     data.each do | volume |
       if volume['vol_name'] == volume_name
         return volume
+      end
     end
-    @crit_fs << "Could not find #{volume_name}"
+    raise "Could not find #{volume_name}"
   end
 
   def json_valid?(str)
-    JSON.parse(str)
-    return true
-  rescue JSON::ParserError
-    return false
+    begin
+      JSON.parse(str)
+      return true
+    rescue JSON::ParserError
+      return false
+    end
   end
 
   def acquire_resource
@@ -129,6 +155,10 @@ class CheckJson < Sensu::Plugin::Check::CLI
     if config[:postbody]
       post_body = IO.readlines(config[:postbody])
       req.body = post_body.join
+    end
+
+    unless config[:user].nil? && config[:password].nil?
+      req.basic_auth config[:user], config[:password]
     end
 
     if config[:header]
@@ -151,10 +181,13 @@ class CheckJson < Sensu::Plugin::Check::CLI
 
     if volume['status'] != 'HEALTHY'
       @crit_fs << "#{volume['vol_name']} status is #{volume['status']}"
-    used_pct = volume['used_pct'][-1].to_f
+    end
+    used_pct = volume['used_pct'].chomp('%').to_f
+    
     if used_pct >= config[:bcrit]
       @crit_fs << "#{volume['vol_name']} usage is #{volume['used_pct']}"
     elsif used_pct >= config[:bwarn]
       @warn_fs << "#{volume['vol_name']} usage is #{volume['used_pct']}"
+    end
   end
 end
