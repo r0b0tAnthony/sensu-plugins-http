@@ -65,21 +65,10 @@ class CheckFreenasServices< Sensu::Plugin::Check::CLI
     long: '--whole-response',
     boolean: true,
     default: false
-  option :warnings,
-    short: '-w',
-    long: '--include-warnings',
-    boolean: true,
-    default: true
-  option :criticals,
-    short: '-c',
-    long: '--include-criticals',
-    boolean: true,
-    default: true
-  option :oks,
-    short: '-o',
-    long: '--include-oks',
-    boolean: true,
-    default: false
+  option :service,
+    short: '-s SERVICE[,SERVICE]',
+    long: '--service SERVICE[,SERVICE]',
+    proc: proc { |a| a.split(',') }
   option :user,
     short: '-U',
     long: '--username USER'
@@ -89,13 +78,11 @@ class CheckFreenasServices< Sensu::Plugin::Check::CLI
 
   def initialize
     super
-    @criticals  = 0
-    @warnings   = 0
-    @oks        = 0
+    @critical_services = []
   end
 
   def usage_summary
-    "Critical: #{@criticals}, Warnings: #{@warnings}, OKs: #{@oks}"
+    @critical_services.join(', ')
   end
 
   def run
